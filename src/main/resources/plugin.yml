@@ -1,0 +1,6 @@
+name: SkyblockEco
+version: '${version}'
+
+main: com.sallamadm.skyblockeco.SkyblockEco
+api-version: '1.20'
+load: POSTWORLD

@@ -1,5 +1,6 @@
 package com.sallamadm.skyblockeco;
 
+import com.sallamadm.skyblockeco.commands.BalanceCommand;
 import com.sallamadm.skyblockeco.data.DataManager;
 import dev.jorel.commandapi.CommandAPI;
 import dev.jorel.commandapi.CommandAPIBukkitConfig;
@@ -8,6 +9,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class SkyblockEco extends JavaPlugin {
 
     private DataManager dataManager;
+    private static SkyblockEco instance;
 
 
     @Override
@@ -17,27 +19,26 @@ public final class SkyblockEco extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        getConfig().addDefault("mysql.host", "localhost");
-        getConfig().addDefault("mysql.port", 3306);
-        getConfig().addDefault("mysql.database", "skyblockeco");
-        getConfig().addDefault("mysql.username", "root");
-        getConfig().addDefault("mysql.password", "");
-        getConfig().options().copyDefaults(true);
-        saveConfig();
+        instance = this;
 
         CommandAPI.onEnable();
 
         this.dataManager = new DataManager(this);
-        this.dataManager.loadData();
+
+        BalanceCommand.registerCommand(this);
+
+        getLogger().info("SkyblockEco aktif.");
     }
 
     @Override
     public void onDisable() {
-        if(dataManager != null) {
-            dataManager.closeConnection();
-            dataManager.saveDataSync();
-        }
         CommandAPI.onDisable();
+
+        getLogger().info("SkyblockEco kapatıldı.");
+    }
+
+    public static SkyblockEco getInstance() {
+        return instance;
     }
 
     public DataManager getDataManager() {

@@ -1,125 +1,103 @@
 package com.sallamadm.skyblockeco.data;
+import com.sallamadm.skyblockcore.SkyblockCore;
 import com.sallamadm.skyblockeco.SkyblockEco;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
+import org.bukkit.Bukkit;
+
+import java.sql.*;
 import java.util.UUID;
+
 public class DataManager {
     private static final long DEFAULT_BALANCE = 500L;
 
     private final SkyblockEco plugin;
-    private Connection connection;
 
     public DataManager(SkyblockEco plugin) {
         this.plugin = plugin;
-        connect();
-        createTables();
+        ensureColumn();
     }
 
-    public void loadData() {
-        if (connection == null) {
-            return;
-        }
-        plugin.getLogger().info("DataManager yuklendi.");
-    }
-
-    public void saveDataSync() {
-        if (connection == null) {
-            return;
-        }
-        plugin.getLogger().info("DataManager saveDataSync cagrildi.");
-    }
-
-    private void connect() {
-        String host = plugin.getConfig().getString("mysql.host", "localhost");
-        int port = plugin.getConfig().getInt("mysql.port", 3306);
-        String database = plugin.getConfig().getString("mysql.database", "skyblock");
-        String username = plugin.getConfig().getString("mysql.username", "root");
-        String password = plugin.getConfig().getString("mysql.password", "");
-
+    private Connection connection() {
         try {
-            if (connection != null && !connection.isClosed()) {
-                return;
-            }
-            Class.forName("com.mysql.cj.jdbc.Driver");
-            connection = DriverManager.getConnection(
-                    "jdbc:mysql://" + host + ":" + port + "/" + database + "?autoReconnect=true&useSSL=false&allowPublicKeyRetrieval=true",
-                    username,
-                    password
-            );
-            plugin.getLogger().info("MySQL baglandi.");
+            SkyblockCore core = SkyblockCore.getInstance();
+            if (core == null) return null;
+            return core.getDataManager().getDatabaseConnection();
         } catch (Exception e) {
-            plugin.getLogger().severe("MySQL baglanamadi: " + e.getMessage());
+            plugin.getLogger().severe("SkyblockCore bağlantısına erişilemedi: " + e.getMessage());
+            return null;
         }
     }
 
-    private void createTables() {
-        if (connection == null) {
+    private void ensureColumn() {
+        Connection conn = connection();
+        if (conn == null) {
+            plugin.getLogger().severe("MySQL bağlantısı yok, balance kolonu eklenemedi.");
             return;
         }
 
-        try (Statement statement = connection.createStatement()) {
-            statement.execute("ALTER TABLE sb_accounts ADD COLUMN balance BIGINT NOT NULL DEFAULT 500");
+        try (Statement st = conn.createStatement()) {
+            st.execute(
+                    "ALTER TABLE sb_accounts " +
+                            "ADD COLUMN IF NOT EXISTS balance BIGINT NOT NULL DEFAULT 500"
+            );
+            plugin.getLogger().info("sb_accounts.balance kolonu hazır.");
         } catch (SQLException e) {
-            if (!"42S21".equals(e.getSQLState())) {
-                plugin.getLogger().severe("sb_accounts.balance eklenemedi: " + e.getMessage());
-            }
-        }
-
-        try (Statement statement = connection.createStatement()) {
-            statement.execute("UPDATE sb_accounts SET balance = 500 WHERE balance IS NULL");
-        } catch (SQLException e) {
-            plugin.getLogger().severe("sb_accounts.balance duzeltilemedi: " + e.getMessage());
+            plugin.getLogger().severe("sb_accounts.balance eklenemedi: " + e.getMessage());
         }
     }
 
     public long getBalance(UUID playerUuid) {
-        if (connection == null || playerUuid == null) {
-            return DEFAULT_BALANCE;
-        }
+        Connection conn = connection();
+        if (conn == null || playerUuid == null) return DEFAULT_BALANCE;
 
-        String query = "SELECT balance FROM sb_accounts WHERE uuid = ? LIMIT 1";
-        try (PreparedStatement statement = connection.prepareStatement(query)) {
-            statement.setString(1, playerUuid.toString());
-
-            try (ResultSet rs = statement.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getLong("balance");
-                }
+        String sql = "SELECT balance FROM sb_accounts WHERE uuid = ? LIMIT 1";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, playerUuid.toString());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return rs.getLong("balance");
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Balance okunamadi: " + e.getMessage());
+            plugin.getLogger().severe("Balance okunamadı: " + e.getMessage());
         }
-
         return DEFAULT_BALANCE;
     }
 
     public boolean setBalance(UUID playerUuid, long balance) {
-        if (connection == null || playerUuid == null) {
-            return false;
-        }
+        Connection conn = connection();
+        if (conn == null || playerUuid == null) return false;
 
-        String query = "UPDATE sb_accounts SET balance = ? WHERE uuid = ?";
-        try (PreparedStatement statement = connection.prepareStatement(query)) {
-            statement.setLong(1, balance);
-            statement.setString(2, playerUuid.toString());
-            return statement.executeUpdate() > 0;
+        long clamped = Math.max(0L, balance);
+        String sql = "UPDATE sb_accounts SET balance = ? WHERE uuid = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, clamped);
+            ps.setString(2, playerUuid.toString());
+            return ps.executeUpdate() > 0;
         } catch (SQLException e) {
-            plugin.getLogger().severe("Balance guncellenemedi: " + e.getMessage());
+            plugin.getLogger().severe("Balance güncellenemedi: " + e.getMessage());
             return false;
         }
     }
 
-    public void closeConnection() {
-        try {
-            if (connection != null && !connection.isClosed()) {
-                connection.close();
-            }
-        } catch (SQLException e) {
-            plugin.getLogger().severe("MySQL baglantisi kapatilamadi: " + e.getMessage());
-        }
+    public void setBalanceAsync(UUID playerUuid, long balance) {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> setBalance(playerUuid, balance));
+    }
+
+    public void addBalanceAsync(UUID playerUuid, long amount) {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            long current = getBalance(playerUuid);
+            setBalance(playerUuid, current + amount);
+        });
+    }
+
+    public boolean removeBalance(UUID playerUuid, long amount) {
+        Connection conn = connection();
+        if (conn == null || playerUuid == null) return false;
+
+        long current = getBalance(playerUuid);
+        if (current < amount) return false;
+        return setBalance(playerUuid, current - amount);
+    }
+
+    public boolean hasBalance(UUID playerUuid, long amount) {
+        return getBalance(playerUuid) >= amount;
     }
 }

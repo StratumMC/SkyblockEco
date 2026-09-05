@@ -1,6 +1,10 @@
 package com.sallamadm.skyblockeco;
 
+import com.sallamadm.skyblockcore.SkyblockCore;
 import com.sallamadm.skyblockeco.commands.BalanceCommand;
+import com.sallamadm.skyblockeco.commands.PayCommand;
+import com.sallamadm.skyblockeco.hooks.EconomyHook;
+import com.sallamadm.skyblockeco.listeners.BalanceChangeListener;
 import com.sallamadm.skyblockeco.data.DataManager;
 import dev.jorel.commandapi.CommandAPI;
 import dev.jorel.commandapi.CommandAPIBukkitConfig;
@@ -10,6 +14,7 @@ public final class SkyblockEco extends JavaPlugin {
 
     private DataManager dataManager;
     private static SkyblockEco instance;
+    SkyblockCore core = SkyblockCore.getInstance();
 
 
     @Override
@@ -25,7 +30,12 @@ public final class SkyblockEco extends JavaPlugin {
 
         this.dataManager = new DataManager(this);
 
+        getServer().getPluginManager().registerEvents(new BalanceChangeListener(core), this);
+
+        EconomyHook.register();
+
         BalanceCommand.registerCommand(this);
+        PayCommand.registerCommand(this);
 
         getLogger().info("SkyblockEco aktif.");
     }

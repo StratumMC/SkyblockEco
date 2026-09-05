@@ -1,13 +1,14 @@
 package com.sallamadm.skyblockeco.data;
 import com.sallamadm.skyblockcore.SkyblockCore;
 import com.sallamadm.skyblockeco.SkyblockEco;
+import com.sallamadm.skyblockeco.events.BalanceChangeEvent;
 import org.bukkit.Bukkit;
 
 import java.sql.*;
 import java.util.UUID;
 
 public class DataManager {
-    private static final long DEFAULT_BALANCE = 500L;
+    private static final double DEFAULT_BALANCE = 500D;
 
     private final SkyblockEco plugin;
 
@@ -45,7 +46,7 @@ public class DataManager {
         }
     }
 
-    public long getBalance(UUID playerUuid) {
+    public double getBalance(UUID playerUuid) {
         Connection conn = connection();
         if (conn == null || playerUuid == null) return DEFAULT_BALANCE;
 
@@ -53,7 +54,7 @@ public class DataManager {
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, playerUuid.toString());
             try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) return rs.getLong("balance");
+                if (rs.next()) return rs.getDouble("balance");
             }
         } catch (SQLException e) {
             plugin.getLogger().severe("Balance okunamadı: " + e.getMessage());
@@ -61,43 +62,56 @@ public class DataManager {
         return DEFAULT_BALANCE;
     }
 
-    public boolean setBalance(UUID playerUuid, long balance) {
+    public boolean setBalance(UUID playerUuid, double balance) {
         Connection conn = connection();
         if (conn == null || playerUuid == null) return false;
 
-        long clamped = Math.max(0L, balance);
+        double clamped = Math.max(0D, balance);
+        double oldBalance = getBalance(playerUuid);
         String sql = "UPDATE sb_accounts SET balance = ? WHERE uuid = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setLong(1, clamped);
+            ps.setDouble(1, clamped);
             ps.setString(2, playerUuid.toString());
-            return ps.executeUpdate() > 0;
+
+            boolean success = ps.executeUpdate() > 0;
+            if(success && oldBalance != clamped) {
+                 Bukkit.getScheduler().runTask(plugin, () -> {
+                     Bukkit.getPluginManager().callEvent(new BalanceChangeEvent(playerUuid, (double) oldBalance, (double) clamped));
+                 });
+            }
+            return success;
         } catch (SQLException e) {
             plugin.getLogger().severe("Balance güncellenemedi: " + e.getMessage());
             return false;
         }
     }
 
-    public void setBalanceAsync(UUID playerUuid, long balance) {
+    public void setBalanceAsync(UUID playerUuid, double balance) {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> setBalance(playerUuid, balance));
     }
 
-    public void addBalanceAsync(UUID playerUuid, long amount) {
+    public void addBalanceAsync(UUID playerUuid, double amount) {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            long current = getBalance(playerUuid);
-            setBalance(playerUuid, current + amount);
+            double oldBalance = getBalance(playerUuid);
+            double newBalance = oldBalance + amount;
+            if (setBalance(playerUuid, newBalance)) {
+                // set balance kısmı buradaki event'i zaten tetikliyor, bu yüzden burada tekrar tetiklemeye gerek yok.
+            }
         });
     }
 
-    public boolean removeBalance(UUID playerUuid, long amount) {
+    public boolean removeBalance(UUID playerUuid, double amount) {
         Connection conn = connection();
         if (conn == null || playerUuid == null) return false;
 
-        long current = getBalance(playerUuid);
+        double current = getBalance(playerUuid);
         if (current < amount) return false;
-        return setBalance(playerUuid, current - amount);
+
+        double newBalance = current - amount;
+        return setBalance(playerUuid, newBalance);
     }
 
-    public boolean hasBalance(UUID playerUuid, long amount) {
+    public boolean hasBalance(UUID playerUuid, double amount) {
         return getBalance(playerUuid) >= amount;
     }
 }

@@ -13,7 +13,7 @@ public class BalanceCommand {
                 .withAliases("bal")
                 .withHelp("Oyuncunun parasını gösterir.", "Paranı gösterir.")
                 .executesPlayer((player, args) -> {
-                    long balance = EconomyAPI.getBalance(player.getUniqueId());
+                    double balance = EconomyAPI.getBalance(player.getUniqueId());
                     player.sendMessage("§6Bakiyen: §e" + balance + " §6coin");
                 })
                 .register();

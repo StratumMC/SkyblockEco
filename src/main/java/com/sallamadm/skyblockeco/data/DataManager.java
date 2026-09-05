@@ -5,7 +5,7 @@ import com.sallamadm.skyblockeco.events.BalanceChangeEvent;
 import org.bukkit.Bukkit;
 
 import java.sql.*;
-import java.util.UUID;
+import java.util.*;
 
 public class DataManager {
     private static final double DEFAULT_BALANCE = 500D;
@@ -111,7 +111,74 @@ public class DataManager {
         return setBalance(playerUuid, newBalance);
     }
 
-    public boolean hasBalance(UUID playerUuid, double amount) {
-        return getBalance(playerUuid) >= amount;
+    public void exchangeBal(UUID player, UUID target, double amount) {
+        if (player == null || target == null || amount <= 0) return;
+
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            double playerBalance = getBalance(player);
+            if (playerBalance < amount) {
+                plugin.getLogger().warning(SkyblockCore.getInstance().getMessageManager().getMessage("economy.not-enough-money"));
+                return;
+            }
+
+            double targetBalance = getBalance(target);
+
+            double newPlayerBalance = playerBalance - amount;
+            double newTargetBalance = targetBalance + amount;
+
+            setBalance(player, newPlayerBalance);
+            setBalance(target, newTargetBalance);
+        });
+    }
+
+    public List<BalanceEntry> getTopBalances(int limit, int offset) {
+        List<BalanceEntry> result = new ArrayList<>();
+        Connection conn = connection();
+        if (conn == null) return result;
+
+        String sql = "SELECT username, balance FROM sb_accounts ORDER BY balance DESC LIMIT ? OFFSET ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, limit);
+            ps.setInt(2, offset);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new BalanceEntry(rs.getString("username"), rs.getDouble("balance")));
+                }
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Baltop okunamadı: " + e.getMessage());
+        }
+        return result;
+    }
+
+    public int getTotalAccountCount() {
+        Connection conn = connection();
+        if (conn == null) return 0;
+
+        String sql = "SELECT COUNT(*) FROM sb_accounts";
+        try (PreparedStatement ps = conn.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
+            if (rs.next()) return rs.getInt(1);
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Hesap sayısı okunamadı: " + e.getMessage());
+        }
+        return 0;
+    }
+
+    public static class BalanceEntry {
+        private final String username;
+        private final double balance;
+
+        public BalanceEntry(String username, double balance) {
+            this.username = username;
+            this.balance = balance;
+        }
+
+        public String getUsername() {
+            return username;
+        }
+
+        public double getBalance() {
+            return balance;
+        }
     }
 }

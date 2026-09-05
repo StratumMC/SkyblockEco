@@ -1,6 +1,7 @@
 package com.sallamadm.skyblockeco;
 
 import com.sallamadm.skyblockcore.SkyblockCore;
+import com.sallamadm.skyblockeco.commands.BalTopCommand;
 import com.sallamadm.skyblockeco.commands.BalanceCommand;
 import com.sallamadm.skyblockeco.commands.PayCommand;
 import com.sallamadm.skyblockeco.hooks.EconomyHook;
@@ -36,6 +37,7 @@ public final class SkyblockEco extends JavaPlugin {
 
         BalanceCommand.registerCommand(this);
         PayCommand.registerCommand(this);
+        BalTopCommand.registerCommand(this);
 
         getLogger().info("SkyblockEco aktif.");
     }

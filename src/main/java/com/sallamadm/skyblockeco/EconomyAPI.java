@@ -38,8 +38,4 @@ public class EconomyAPI {
         return eco().getDataManager().removeBalance(playerUuid, amount);
     }
 
-    public static boolean hasBalance(UUID playerUuid, double amount) {
-        if (!ready()) return false;
-        return eco().getDataManager().hasBalance(playerUuid, amount);
-    }
 }
